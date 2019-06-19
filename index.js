@@ -3,16 +3,13 @@ let config = require('./config/config');
 let app = express() ;
 let cors = require('cors');
 let passport  = require('passport') ; 
-let FacebookStrategy = require('passport-facebook').Strategy;
-let userDetails = {
-    'accessToken':'',
-    'userId':'',
-    'pageId':'',
-    'instaId':'',
-    'mediaIds':[]
-} ; 
-
+let InstagramStrategy = require('passport-instagram').Strategy;
 let request = require('request') ;
+
+
+app.get('/home',(req,res)=>{
+    res.sendFile(__dirname+'/views/index.html')
+});
 
 passport.serializeUser(function(user, cb) {
     cb(null, user);
@@ -21,6 +18,74 @@ passport.serializeUser(function(user, cb) {
   passport.deserializeUser(function(obj, cb) {
     cb(null, obj);
   });
+
+// *******************************starting of the insta strategy 
+
+let instaUserDetails = {
+    'accessToken':'',
+    'userId':''
+}
+
+passport.use(new InstagramStrategy({
+    clientID: 'e91f52884cb44b58b6b2298a9e446260',
+    clientSecret: '15a5a7d599924850918497c2244a801a',
+    callbackURL: "http://127.0.0.1:3000/auth/instagram/callback"
+  },
+  function(accessToken, refreshToken, profile, done) {
+      instaUserDetails['accessToken'] = accessToken ;
+      let parsedProfile = profile ;
+    //   let parsedProfile = JSON.parse(profile) ;
+      instaUserDetails["userId"] = parsedProfile["id"]
+        console.log("this is the access token ",accessToken,"\n this is the profile data ",profile);
+  }
+));
+
+app.get('/auth/instagram',
+  passport.authenticate('instagram'));
+
+app.get('/auth/instagram/callback', 
+  passport.authenticate('instagram', { failureRedirect: '/login' }),
+
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/home');
+  });
+
+app.get('/auth/insta/media',(req,res)=>{
+    
+request('https://api.instagram.com/v1/users/self/media/recent/?access_token='+instaUserDetails["accessToken"],(error,response,body)=>{
+    if (error) console.log("this is the error in getting the media ",error);
+    let parsedBody = JSON.parse(body) ;
+    console.log("this is the body",parsedBody);
+    res.status(200).send(parsedBody) ;
+})
+})
+
+// *******************************ending of the insta strategy 
+
+
+
+
+
+
+
+
+
+// ***********************************starting of facebook strategy and its usage
+
+
+let FacebookStrategy = require('passport-facebook').Strategy;
+let userDetails = {
+    'accessToken':'',
+    'userId':'',
+    'pageId':'',
+    'instaId':'',
+    'mediaIds':[],
+    'hashtagNodeId':''
+} ; 
+
+
+
   
 passport.use(new FacebookStrategy({
     clientID: "2295400073846867",
@@ -71,9 +136,6 @@ function getUser(accessToken,profile){
 //     }
 // })
 
-app.get('/home',(req,res)=>{
-    res.sendFile(__dirname+'/views/index.html')
-});
 
 
 function getFbPage(){
@@ -144,16 +206,28 @@ app.get('/insta/media',(req,res)=>{
         let parsedBody  = JSON.parse(body) ;
         res.status(200).json(parsedBody);
     })
+});
+
+app.get('insta/media/hashtag',(req,res)=>{
+    request('https://graph.facebook.com/ig_hashtag_search?user_id='+userDetails['instaId']+'&q=smartfifty&access_token='+userDetails["accessToken"],(error,response,body)=>{
+        let parsedBody  = JSON.parse(body) ;
+        userDetails["hashtagNodeId"] = parsedBody['id'] ;
+        console.log("this is the hashtag data",parsedBody);
+        request('https://graph.facebook.com/'+userDetails['hashtagNodeId']+'/recent_media?user_id='+userDetails['userId']+"&access_token="+userDetails["accessToken"],(error,response,body)=>{
+            // here we should get the media objects ids which we can use to get the media details and from it get the media urls and store them in database
+        let parsedContent = JSON.parse(body) ; 
+            res.status(200).json({"this is the has tagged content":parsedContent})
+        });
+    })
 })
 
-// const authRoutes = require('./routes/auth.routes');
-// app.use(authRoutes) ; 
 
 
-app.get("/page/details",(req,res)=>{
-    request('')
-})
+// // const authRoutes = require('./routes/auth.routes');
+// // app.use(authRoutes) ; 
 
+
+// ***********************************ending of facebook strategy and its usage
 
 
 let bodyParser = require('body-parser') ;
